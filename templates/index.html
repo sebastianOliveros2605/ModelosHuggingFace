@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hugging Face API</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        .container { width: 50%; margin: auto; }
+        textarea, input { width: 100%; margin-bottom: 10px; }
+        button { padding: 10px 20px; margin: 5px; }
+        .output { border: 1px solid #ddd; padding: 10px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Prueba de Modelos Hugging Face</h1>
+        <select id="modelSelect" onchange="updateInputs()">
+            <option value="sentiment">Análisis de Sentimiento</option>
+            <option value="zero-shot">Clasificación Zero-Shot</option>
+            <option value="text-gen">Generación de Texto</option>
+            <option value="fill-mask">Relleno de Máscara</option>
+            <option value="ner">Reconocimiento de Entidades</option>
+            <option value="qa">Pregunta y Respuesta</option>
+            <option value="summarization">Resumen de Texto</option>
+            <option value="translation">Traducción</option>
+        </select>
+        <div id="inputFields">
+            <textarea id="inputText" placeholder="Escribe aquí..."></textarea>
+        </div>
+        <button onclick="runModel()">Ejecutar</button>
+        <div id="result" class="output"></div>
+    </div>
+
+    <script>
+        function updateInputs() {
+            let model = document.getElementById("modelSelect").value;
+            let inputFields = document.getElementById("inputFields");
+            inputFields.innerHTML = "";
+            
+            if (model === "qa") {
+                inputFields.innerHTML = '<input id="question" placeholder="Pregunta">' +
+                                        '<textarea id="context" placeholder="Contexto"></textarea>';
+            } else {
+                inputFields.innerHTML = '<textarea id="inputText" placeholder="Escribe aquí..."></textarea>';
+            }
+        }
+
+        async function runModel() {
+            let model = document.getElementById("modelSelect").value;
+            let data = {};
+            if (model === "qa") {
+                data.question = document.getElementById("question").value;
+                data.context = document.getElementById("context").value;
+            } else {
+                data.text = document.getElementById("inputText").value;
+            }
+            
+            let response = await fetch(`/${model}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            });
+            let result = await response.json();
+            document.getElementById("result").innerText = JSON.stringify(result, null, 2);
+        }
+    </script>
+</body>
+</html>
