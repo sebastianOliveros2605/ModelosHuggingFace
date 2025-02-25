@@ -1,69 +1,290 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hugging Face API</title>
+    <title>Hugging Face Chat</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        .container { width: 50%; margin: auto; }
-        textarea, input { width: 100%; margin-bottom: 10px; }
-        button { padding: 10px 20px; margin: 5px; }
-        .output { border: 1px solid #ddd; padding: 10px; margin-top: 10px; }
+        body {
+            display: flex;
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: #333;
+            color: white;
+            padding: 15px;
+            height: 100vh;
+        }
+
+        .sidebar h2 {
+            text-align: center;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .sidebar ul li {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #555;
+        }
+
+        .sidebar ul li:hover {
+            background: #444;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .chat-box div {
+            margin-bottom: 10px;
+        }
+
+        .input-box {
+            padding: 15px;
+            display: flex;
+        }
+
+        textarea,
+        input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        button {
+            padding: 10px 15px;
+            margin-left: 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
     </style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>Prueba de Modelos Hugging Face</h1>
-        <select id="modelSelect" onchange="updateInputs()">
-            <option value="sentiment">Análisis de Sentimiento</option>
-            <option value="zero-shot">Clasificación Zero-Shot</option>
-            <option value="text-gen">Generación de Texto</option>
-            <option value="fill-mask">Relleno de Máscara</option>
-            <option value="ner">Reconocimiento de Entidades</option>
-            <option value="qa">Pregunta y Respuesta</option>
-            <option value="summarization">Resumen de Texto</option>
-            <option value="translation">Traducción</option>
-        </select>
-        <div id="inputFields">
+    <div class="sidebar">
+        <h2>Modelos</h2>
+        <ul id="modelList">
+            <li onclick="selectModel('sentiment')">Análisis de Sentimiento</li>
+            <li onclick="selectModel('zero-shot')">Clasificación Zero-Shot</li>
+            <li onclick="selectModel('text-gen')">Generación de Texto</li>
+            <li onclick="selectModel('fill-mask')">Relleno de Máscara</li>
+            <li onclick="selectModel('ner')">Reconocimiento de Entidades</li>
+            <li onclick="selectModel('qa')">Pregunta y Respuesta</li>
+            <li onclick="selectModel('summarization')">Resumen de Texto</li>
+            <li onclick="selectModel('translation')">Traducción</li>
+        </ul>
+    </div>
+    <div class="chat-container">
+        <div id="chatBox" class="chat-box"></div>
+        <div class="input-box">
             <textarea id="inputText" placeholder="Escribe aquí..."></textarea>
+            <button onclick="sendMessage()">Enviar</button>
         </div>
-        <button onclick="runModel()">Ejecutar</button>
-        <div id="result" class="output"></div>
     </div>
 
     <script>
-        function updateInputs() {
-            let model = document.getElementById("modelSelect").value;
-            let inputFields = document.getElementById("inputFields");
-            inputFields.innerHTML = "";
-            
-            if (model === "qa") {
-                inputFields.innerHTML = '<input id="question" placeholder="Pregunta">' +
-                                        '<textarea id="context" placeholder="Contexto"></textarea>';
-            } else {
-                inputFields.innerHTML = '<textarea id="inputText" placeholder="Escribe aquí..."></textarea>';
+        // Define funciones personalizadas por modelo
+        const modelHandlers = {
+            "sentiment": async () => {
+                let history = await loadChatHistory("sentiment");
+                document.getElementById("chatBox").innerHTML = "";
+
+                if (!Array.isArray(history)) {
+                    document.getElementById("chatBox").innerHTML = "No hay historial disponible.";
+                    return;
+                }
+
+                history.forEach(chat => {
+                    let div = document.createElement("div");
+                    div.innerHTML = `<strong>Tú:</strong> ${chat.user_input}<br><strong>Respuesta:</strong> ${formatSentimentResponse(chat.model_response)}`;
+                    document.getElementById("chatBox").appendChild(div);
+                });
+            },
+            "zero-shot": async () => await loadChatHistory("zero-shot"),
+            "text-gen": async () => await loadChatHistory("text-gen"),
+            "fill-mask": async () => {
+                await loadChatHistory("fill-mask");
+                document.getElementById("inputText").placeholder = "Ingresa una oración con [MASK]";
+            },
+            "ner": async () => {
+                await loadChatHistory("ner");
+                document.getElementById("inputText").placeholder = "Escribe una frase para extraer entidades.";
+            },
+            "qa": async () => {
+                await loadChatHistory("qa");
+                document.getElementById("inputText").placeholder = "Escribe tu pregunta...";
+            },
+            "summarization": async () => {
+                await loadChatHistory("summarization");
+                document.getElementById("inputText").placeholder = "Pega el texto a resumir aquí.";
+            },
+            "translation": async () => {
+                await loadChatHistory("translation");
+                document.getElementById("inputText").placeholder = "Escribe el texto en inglés para traducir.";
+            }
+        };
+
+        // Función para seleccionar modelo y ejecutar su configuración específica
+        async function selectModel(model) {
+            selectedModel = model;
+
+            // Si el modelo es "sentiment", ejecutamos su handler y salimos
+            if (model === "sentiment") {
+                await modelHandlers["sentiment"](); // Carga historial correctamente
+                return;
+            }
+
+            document.getElementById("chatBox").innerHTML = "Cargando historial...";
+
+            if (modelHandlers[model]) {
+                await modelHandlers[model]();
+            }
+
+            let history = await loadChatHistory(model);
+            document.getElementById("chatBox").innerHTML = "";
+
+            if (!Array.isArray(history) || history.length === 0) {
+                document.getElementById("chatBox").innerHTML = "No hay historial disponible.";
+                return;
+            }
+
+            history.forEach(chat => {
+                let div = document.createElement("div");
+                div.innerHTML = `<strong>Tú:</strong> ${chat.user_input}<br><strong>Respuesta:</strong> ${
+            model === "sentiment" ? formatSentimentResponse(chat.model_response) : formatResponse(chat.model_response)
+        }`;
+
+                document.getElementById("chatBox").appendChild(div);
+            });
+        }
+
+
+
+        // Función para cargar historial de chat
+        async function loadChatHistory(model) {
+            document.getElementById("chatBox").innerHTML = "Cargando historial...";
+
+            try {
+                let response = await fetch(`/history/${model}`);
+                let history = await response.json();
+                return Array.isArray(history) ? history : [];
+            }
+            catch (error) {
+                console.error("Error cargando historial:", error);
+                return [];
             }
         }
 
-        async function runModel() {
-            let model = document.getElementById("modelSelect").value;
-            let data = {};
-            if (model === "qa") {
-                data.question = document.getElementById("question").value;
-                data.context = document.getElementById("context").value;
-            } else {
-                data.text = document.getElementById("inputText").value;
+        // Función mejorada para formatear la salida del análisis de sentimientos
+        function formatSentimentResponse(response) {
+            if (!response) {
+                return "No se pudo analizar el sentimiento.";
             }
-            
-            let response = await fetch(`/${model}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data)
-            });
-            let result = await response.json();
-            document.getElementById("result").innerText = JSON.stringify(result, null, 2);
+
+            // Si la respuesta es un array y tiene al menos un elemento, tomamos el primero
+            if (Array.isArray(response) && response.length > 0) {
+                response = response[0];
+            }
+            console.log(response)
+            if (typeof response === "object" && "label" in response && "score" in response) {
+                let sentimentText = response.label === "positive" ?
+                    "<strong>Positivo</strong> 😊" :
+                    "<strong>Negativo</strong> 😠";
+
+                return `El comentario fue calificado como ${sentimentText} con un puntaje de: ${response.score.toFixed(2)}`;
+            }
+
+            return "No se pudo analizar el sentimiento.";
+        }
+
+
+
+        // Función para enviar mensaje
+        async function sendMessage() {
+            let text = document.getElementById("inputText").value;
+            if (!text) return;
+
+            let data = { text };
+            console.log(`Enviando texto a ${selectedModel}:`, data); // Log antes de enviar
+
+            try {
+                let response = await fetch(`/${selectedModel}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+
+                let result = await response.json();
+                console.log("Respuesta del backend:", result); // Log para ver qué responde la API
+
+                let div = document.createElement("div");
+                div.innerHTML = `<strong>Tú:</strong> ${text}<br><strong>Respuesta:</strong> ${
+            selectedModel === "sentiment" ? formatSentimentResponse(result) : formatResponse(result)
+        }`;
+
+                document.getElementById("chatBox").appendChild(div);
+                document.getElementById("inputText").value = "";
+            }
+            catch (error) {
+                console.error("Error en sendMessage():", error);
+            }
+        }
+
+        function formatResponse(response) {
+            if (!response || response.length === 0) {
+                return "No se obtuvo respuesta.";
+            }
+
+            // Si la respuesta es un array, tomar el primer elemento si existe
+            let res = Array.isArray(response) ? response[0] : response;
+
+            // Manejo especial para el modelo "fill-mask"
+            if (selectedModel === "fill-mask") {
+                console.log(response)
+                let bestMatch = response.reduce((max, current) =>
+                    (current.score > (max.score || 0) ? current : max), response[0]);
+
+                return `La mejor predicción es: "<strong>${bestMatch.sequence}</strong>" (Confianza: ${bestMatch.score.toFixed(2)})`;
+            }
+
+            // Manejo especial para el modelo "translation"
+            if (selectedModel === "translation" && res.translation_text) {
+                return `Traducción: <strong>${res.translation_text}</strong>`;
+            }
+
+            // Manejo especial para el modelo "summarization"
+            if (selectedModel === "summarization" && res.summary_text) {
+                return `Resumen: <strong>${res.summary_text}</strong>`;
+            }
+
+            // Si la respuesta contiene generated_text (para generación de texto)
+            if (res.generated_text) {
+                return `Texto generado: <strong>${res.generated_text}</strong>`;
+            }
+
+            return JSON.stringify(response, null, 2); // Si no encaja en ningún caso anterior, lo muestra en JSON.
         }
     </script>
 </body>
+
 </html>

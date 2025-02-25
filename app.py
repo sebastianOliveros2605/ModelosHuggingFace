@@ -17,7 +17,7 @@ def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # Cargar modelos de Hugging Face
-sentiment_model = pipeline("sentiment-analysis", model="dccuchile/albert-base-spanish-finetuned-xnli")
+sentiment_model = pipeline("sentiment-analysis", model="clapAI/modernBERT-base-multilingual-sentiment")
 zero_shot_model = pipeline("zero-shot-classification", model="morit/spanish_xlm_xnli")
 text_gen_model = pipeline("text-generation", model="mrm8488/spanish-gpt2")
 fill_mask_model = pipeline("fill-mask", model="bertin-project/bertin-roberta-base-spanish")
@@ -54,7 +54,7 @@ def zero_shot_classify(input: ZeroShotInput):
 @app.post("/text-gen")
 def generate_text(input: TextInput):
     result = text_gen_model(input.text)
-    save_chat_to_s3("text_gen", input.text, result)
+    save_chat_to_s3("text-gen", input.text, result)
     return result
 
 @app.post("/fill-mask")
@@ -95,34 +95,29 @@ def save_chat_to_s3(category: str, user_input: str, model_response: dict):
     filename = f"historial/{category}.json"
 
     try:
-        # Intentar obtener el archivo actual del historial desde S3
         obj = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=filename)
         chat_history = json.loads(obj['Body'].read().decode('utf-8'))
     except s3_client.exceptions.NoSuchKey:
-        chat_history = []  # Si el archivo no existe, creamos una lista vacía
+        chat_history = []
 
-    # Asegurarse de que model_response sea un string o un diccionario serializable
-    # Convertir el resultado de los modelos a un formato adecuado
-    if isinstance(model_response, list):
-        model_response = [{"generated_text": r.get('generated_text', '')} for r in model_response]
-    elif isinstance(model_response, dict):
-        # Convertir cualquier objeto de tipo tensor a un tipo serializable
-        model_response = {k: str(v) for k, v in model_response.items()}
-
+    # Asegurar que el formato de respuesta se mantiene correcto según el modelo
+    formatted_response = model_response  # Mantener la estructura original
+    
     # Agregar nueva entrada al historial
     chat_history.append({
         "timestamp": datetime.utcnow().isoformat(),
         "user_input": user_input,
-        "model_response": model_response
+        "model_response": formatted_response
     })
 
-    # Subir el historial actualizado a S3
+    # Subir historial corregido a S3
     s3_client.put_object(
         Bucket=S3_BUCKET_NAME,
         Key=filename,
         Body=json.dumps(chat_history, indent=2, ensure_ascii=False),
         ContentType="application/json"
     )
+
 
 # Endpoint para obtener el historial
 @app.get("/history/{category}")
